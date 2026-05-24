@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
+    const SECURE_TOKEN = "dragon_tail_secure_key_2026";
     let allReports = [];
     let reportsByDate = {}; // YYYY-MM-DD -> report obj
     let currentMonthStr = ""; // YYYY-MM
@@ -13,9 +14,9 @@ document.addEventListener("DOMContentLoaded", () => {
   
     async function init() {
       try {
-        const res = await fetch('./reports.json');
-        if (!res.ok) throw new Error("Failed to load reports data");
+        const res = await fetch(`/api/ctdt/reports?token=${SECURE_TOKEN}`);
         const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to load reports");
   
         allReports = data.reports || [];
         
@@ -169,6 +170,43 @@ document.addEventListener("DOMContentLoaded", () => {
           out += `<div class="article-bluf">${article.bluf}</div>`;
         }
         
+        // Render occurred eventTime and projectedEnd cleanly in dual-column
+        const hasEventTime = article.eventTime && article.eventTime.trim() !== "" && article.eventTime.trim().toUpperCase() !== "N/A";
+        const hasProjectedEnd = article.projectedEnd && article.projectedEnd.trim() !== "" && article.projectedEnd.trim().toUpperCase() !== "N/A";
+        
+        if (hasEventTime || hasProjectedEnd) {
+          out += `<div class="article-duration-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem; padding: 0.75rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.8rem; font-family: var(--font-mono);">`;
+          
+          if (hasEventTime) {
+            out += `<div>`;
+            out += `<span style="color: var(--gold-primary); font-weight: bold; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; display: block; margin-bottom: 0.2rem;">📅 Event Date/Time</span>`;
+            out += `<span style="color: var(--text-light);">${article.eventTime}</span>`;
+            out += `</div>`;
+          } else {
+            out += `<div>`;
+            out += `<span style="color: var(--gold-primary); font-weight: bold; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; display: block; margin-bottom: 0.2rem;">📅 Event Date/Time</span>`;
+            out += `<span style="color: var(--text-ash);">N/A / Unspecified</span>`;
+            out += `</div>`;
+          }
+          
+          if (hasProjectedEnd) {
+            out += `<div>`;
+            out += `<span style="color: var(--crimson); font-weight: bold; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; display: block; margin-bottom: 0.2rem;">🔄 Projected End / Status</span>`;
+            out += `<span style="color: var(--text-light);">${article.projectedEnd}</span>`;
+            if (article.endReason && article.endReason.trim() !== "" && article.endReason.trim().toUpperCase() !== "N/A") {
+              out += `<span style="color: var(--text-ash); display: block; margin-top: 0.2rem; font-style: italic; font-size: 0.75rem;">Reason: ${article.endReason}</span>`;
+            }
+            out += `</div>`;
+          } else {
+            out += `<div>`;
+            out += `<span style="color: var(--crimson); font-weight: bold; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; display: block; margin-bottom: 0.2rem;">🔄 Projected End / Status</span>`;
+            out += `<span style="color: var(--text-ash);">Completed / N/A</span>`;
+            out += `</div>`;
+          }
+          
+          out += `</div>`;
+        }
+        
         if (article.coreIntel && article.coreIntel.length > 0) {
           out += `<div class="core-intel"><ul>`;
           article.coreIntel.forEach(li => { out += `<li>${li}</li>`; });
@@ -233,6 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
           article = {
             title: line.replace('### ', '').replace(/\*\*/g, ''),
             relScore: '', relBluf: '', bluf: '', sourceUrl: '',
+            eventTime: '', projectedEnd: '', endReason: '',
             coreIntel: [], matrix: [], fullText: ''
           };
           currentSection = "";
@@ -254,6 +293,12 @@ document.addEventListener("DOMContentLoaded", () => {
             article.relBluf = mdFormat(line.split(':').slice(1).join(':').trim());
           } else if (lowerLine.includes('article bluf') || (lowerLine.includes('bluf:') && !article.bluf)) {
             article.bluf = mdFormat(line.split(':').slice(1).join(':').trim());
+          } else if (lowerLine.includes('event date') || lowerLine.includes('event time') || lowerLine.includes('occurred at')) {
+            article.eventTime = line.split(':').slice(1).join(':').trim().replace(/\*\*/g, '');
+          } else if (lowerLine.includes('projected end') || lowerLine.includes('expected end')) {
+            article.projectedEnd = line.split(':').slice(1).join(':').trim().replace(/\*\*/g, '');
+          } else if (lowerLine.includes('end reason') || lowerLine.includes('ongoing reason')) {
+            article.endReason = line.split(':').slice(1).join(':').trim().replace(/\*\*/g, '');
           } else if (lowerLine.includes('source url')) {
             let urlMatch = line.match(/(https?:\/\/[^\s\]\)]+)/);
             if (urlMatch) {
@@ -287,7 +332,10 @@ document.addEventListener("DOMContentLoaded", () => {
               article.fullText += mdFormat(line) + "\n";
             } else {
               // If we are before any section but have random text, append to fullText
-              if (!lowerLine.includes('reliability') && !lowerLine.includes('bluf')) {
+              if (!lowerLine.includes('reliability') && !lowerLine.includes('bluf') && 
+                  !lowerLine.includes('event date') && !lowerLine.includes('event time') && !lowerLine.includes('occurred at') && 
+                  !lowerLine.includes('projected end') && !lowerLine.includes('expected end') && 
+                  !lowerLine.includes('end reason') && !lowerLine.includes('ongoing reason')) {
                   article.fullText += mdFormat(line) + "\n";
               }
             }
