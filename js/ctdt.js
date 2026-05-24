@@ -14,9 +14,29 @@ document.addEventListener("DOMContentLoaded", () => {
   
     async function init() {
       try {
-        const res = await fetch(`/api/ctdt/reports?token=${SECURE_TOKEN}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Failed to load reports");
+        let res, data;
+        const isStaticHost = window.location.hostname.endsWith("github.io") || 
+                             window.location.protocol === "file:" || 
+                             window.location.hostname === "";
+        
+        if (isStaticHost) {
+          console.log("[CTDT] Static environment detected. Fetching static reports.json...");
+          res = await fetch("reports.json");
+          data = await res.json();
+          if (!res.ok) throw new Error("Failed to load static reports.json");
+        } else {
+          console.log("[CTDT] Live API environment detected. Fetching reports from backend...");
+          try {
+            res = await fetch(`/api/ctdt/reports?token=${SECURE_TOKEN}`);
+            data = await res.json();
+            if (!res.ok) throw new Error(data.detail || "Failed to load reports via API");
+          } catch (apiErr) {
+            console.warn("[CTDT] Backend API fetch failed. Trying fallback to static reports.json...", apiErr);
+            res = await fetch("reports.json");
+            data = await res.json();
+            if (!res.ok) throw new Error("Failed to load static reports.json fallback");
+          }
+        }
   
         allReports = data.reports || [];
         
